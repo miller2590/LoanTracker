@@ -21,7 +21,7 @@ def validate_loan(name: str, principal: float, apr: float, minimum_payment: floa
     if not name.strip():
         raise ValidationError("Loan name is required")
     _require_positive(principal, "Principal")
-    if apr <= 0 or apr >= 100:
+    if apr < 0 or apr >= 100:
         raise ValidationError("APR must be between 0 and 100")
     _require_positive(minimum_payment, "Minimum payment")
     if not isinstance(start_date, date):

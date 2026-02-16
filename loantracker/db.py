@@ -15,10 +15,9 @@ class Database:
 
     def init(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
+        with self.connect() as conn:
             conn.executescript(
                 """
-                PRAGMA foreign_keys = ON;
                 CREATE TABLE IF NOT EXISTS loans (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
@@ -49,13 +48,16 @@ class Database:
             )
 
     @contextmanager
-    def _connect(self) -> Generator[sqlite3.Connection, None, None]:
+    def connect(self) -> Generator[sqlite3.Connection, None, None]:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
         try:
             yield conn
             conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
         finally:
             conn.close()
 
@@ -65,7 +67,7 @@ class LoanRepository:
         self.db = db
 
     def create(self, loan: Loan) -> Loan:
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO loans (name, principal, apr, minimum_payment, start_date)
@@ -84,7 +86,7 @@ class LoanRepository:
         )
 
     def list_all(self) -> list[Loan]:
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             rows = conn.execute("SELECT * FROM loans ORDER BY created_at DESC").fetchall()
         return [
             Loan(
@@ -99,7 +101,7 @@ class LoanRepository:
         ]
 
     def get(self, loan_id: int) -> Loan | None:
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             row = conn.execute("SELECT * FROM loans WHERE id = ?", (loan_id,)).fetchone()
         if not row:
             return None
@@ -113,14 +115,14 @@ class LoanRepository:
         )
 
     def delete(self, loan_id: int) -> bool:
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             cursor = conn.execute("DELETE FROM loans WHERE id = ?", (loan_id,))
             return cursor.rowcount > 0
 
     def update(self, loan: Loan) -> Loan | None:
         if loan.id is None:
             return None
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             conn.execute(
                 """
                 UPDATE loans
@@ -137,7 +139,7 @@ class PaymentRepository:
         self.db = db
 
     def create(self, payment: Payment) -> Payment:
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO payments (loan_id, amount, payment_date, note)
@@ -155,7 +157,7 @@ class PaymentRepository:
         )
 
     def list_for_loan(self, loan_id: int) -> list[Payment]:
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM payments
@@ -176,7 +178,7 @@ class PaymentRepository:
         ]
 
     def get(self, payment_id: int) -> Payment | None:
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             row = conn.execute("SELECT * FROM payments WHERE id = ?", (payment_id,)).fetchone()
         if not row:
             return None
@@ -191,7 +193,7 @@ class PaymentRepository:
     def update(self, payment: Payment) -> Payment | None:
         if payment.id is None:
             return None
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             conn.execute(
                 """
                 UPDATE payments
@@ -203,7 +205,7 @@ class PaymentRepository:
         return payment
 
     def delete(self, payment_id: int) -> bool:
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             cursor = conn.execute("DELETE FROM payments WHERE id = ?", (payment_id,))
             return cursor.rowcount > 0
 
@@ -213,7 +215,7 @@ class ScenarioRepository:
         self.db = db
 
     def create(self, scenario: Scenario) -> Scenario:
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO scenarios (loan_id, name, extra_monthly)
@@ -230,7 +232,7 @@ class ScenarioRepository:
         )
 
     def list_for_loan(self, loan_id: int) -> list[Scenario]:
-        with self.db._connect() as conn:
+        with self.db.connect() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM scenarios
@@ -248,4 +250,9 @@ class ScenarioRepository:
             )
             for row in rows
         ]
+
+    def delete(self, scenario_id: int) -> bool:
+        with self.db.connect() as conn:
+            cursor = conn.execute("DELETE FROM scenarios WHERE id = ?", (scenario_id,))
+            return cursor.rowcount > 0
 

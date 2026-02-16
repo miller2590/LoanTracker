@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 
 from nicegui import ui
@@ -16,8 +17,8 @@ class PaymentsPanel:
     def __init__(
         self,
         payment_controller: PaymentController,
-        get_selected_loan_id: callable,
-        on_payment_changed: callable = None,
+        get_selected_loan_id: Callable[[], int | None],
+        on_payment_changed: Callable[[], None] | None = None,
     ) -> None:
         self.payment_controller = payment_controller
         self.get_selected_loan_id = get_selected_loan_id

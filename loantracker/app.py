@@ -22,10 +22,9 @@ def main() -> None:
     scenario_controller = ScenarioController(scenario_repo)
     projection_controller = ProjectionController(DailyPayoffStrategy(), payment_repo, loan_repo)
 
-    view = LoanTrackerView(loan_controller, payment_controller, scenario_controller, projection_controller)
-
     @ui.page("/")
     def index() -> None:
+        view = LoanTrackerView(loan_controller, payment_controller, scenario_controller, projection_controller)
         view.build()
 
     ui.run(title="Loan Tracker", reload=False)

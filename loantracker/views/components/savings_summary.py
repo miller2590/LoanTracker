@@ -8,7 +8,6 @@ from nicegui import ui
 
 from ...controllers import LoanController, ProjectionController
 from ...models import Loan
-from .currency_input import parse_currency
 
 
 class SavingsSummaryCard:
@@ -44,27 +43,18 @@ class SavingsSummaryCard:
             return
 
         try:
-            # Get projections
-            baseline = self.projection_controller.project(loan_id, 0.0, "monthly")
-            whatif = self.projection_controller.project(loan_id, extra_monthly, "monthly")
+            baseline = self.projection_controller.project_with_summary(loan_id, 0.0, "monthly")
+            whatif = self.projection_controller.project_with_summary(loan_id, extra_monthly, "monthly")
 
-            # Calculate totals
-            baseline_total_paid = len(baseline) * loan.minimum_payment
-            baseline_interest = baseline_total_paid - loan.principal
+            baseline_interest = baseline.total_interest
+            whatif_interest = whatif.total_interest
 
-            whatif_payments = len(whatif)
-            whatif_total_paid = whatif_payments * (loan.minimum_payment + extra_monthly)
-            whatif_interest = whatif_total_paid - loan.principal
-
-            # Calculate savings
-            months_saved = len(baseline) - len(whatif)
+            months_saved = len(baseline.points) - len(whatif.points)
             interest_saved = baseline_interest - whatif_interest
 
-            # Get payoff dates
-            baseline_payoff = baseline[-1].point_date if baseline else None
-            whatif_payoff = whatif[-1].point_date if whatif else None
+            baseline_payoff = baseline.payoff_date
+            whatif_payoff = whatif.payoff_date
 
-            # Calculate crossover dates
             baseline_crossover = self._find_principal_crossover(loan, 0.0)
             whatif_crossover = self._find_principal_crossover(loan, extra_monthly) if extra_monthly > 0 else None
 
@@ -78,8 +68,8 @@ class SavingsSummaryCard:
                     )
                 else:
                     self._build_baseline_view(
-                        baseline, baseline_payoff,
-                        baseline_interest, baseline_total_paid,
+                        baseline.points, baseline_payoff,
+                        baseline_interest, baseline.total_paid,
                         baseline_crossover,
                     )
 
@@ -191,6 +181,7 @@ class SavingsSummaryCard:
         monthly_payment = loan.minimum_payment + extra_monthly
         current_date = date.today()
         last_month = (current_date.year, current_date.month)
+        accrued_interest = 0.0
 
         max_days = 365 * 100
 
@@ -198,22 +189,22 @@ class SavingsSummaryCard:
             current_date += timedelta(days=1)
             daily_interest = balance * daily_rate
             balance += daily_interest
+            accrued_interest += daily_interest
 
             current_month = (current_date.year, current_date.month)
             if current_month != last_month:
-                monthly_interest = balance * (loan.apr / 100.0) / 12.0
                 payment = min(monthly_payment, balance)
-                interest_portion = min(monthly_interest, payment)
+                interest_portion = min(accrued_interest, payment)
                 principal_portion = payment - interest_portion
 
                 if principal_portion > interest_portion:
                     return current_date
 
                 balance -= payment
+                accrued_interest = 0.0
                 last_month = current_month
 
             if balance <= 0:
                 break
 
         return None
-

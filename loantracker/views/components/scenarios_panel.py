@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from nicegui import ui
 
 from ...controllers import ScenarioController
@@ -15,8 +17,8 @@ class ScenariosPanel:
     def __init__(
         self,
         scenario_controller: ScenarioController,
-        get_selected_loan_id: callable,
-        on_scenario_changed: callable = None,
+        get_selected_loan_id: Callable[[], int | None],
+        on_scenario_changed: Callable[[], None] | None = None,
     ) -> None:
         self.scenario_controller = scenario_controller
         self.get_selected_loan_id = get_selected_loan_id
@@ -29,7 +31,7 @@ class ScenariosPanel:
         """Get the extra monthly payment input element."""
         return self._extra_monthly_input
 
-    def build(self, on_update_projection: callable) -> None:
+    def build(self, on_update_projection: Callable[[], None]) -> None:
         """Build the scenarios panel UI."""
         ui.label("Compare Payment Scenarios").classes("text-subtitle1 font-medium")
         ui.separator()
@@ -71,11 +73,16 @@ class ScenariosPanel:
 
         ui.separator().classes("my-4")
         ui.label("Load Saved Scenario").classes("text-subtitle1 font-medium")
-        self._scenario_select = ui.select(
-            label="Saved Scenarios",
-            options={},
-            on_change=self._on_scenario_selected
-        ).classes("w-full")
+        with ui.row().classes("w-full items-center gap-1"):
+            self._scenario_select = ui.select(
+                label="Saved Scenarios",
+                options={},
+                on_change=self._on_scenario_selected
+            ).classes("flex-1")
+            ui.button(
+                icon="delete",
+                on_click=self._delete_selected_scenario,
+            ).props("flat round dense size=sm color=negative").tooltip("Delete Scenario")
 
     def refresh(self, loan_id: int | None, selected: Scenario | None = None) -> None:
         """Refresh the saved scenarios list."""
@@ -88,6 +95,21 @@ class ScenariosPanel:
         self._scenario_select.set_options(options)
         if selected and selected.id in options:
             self._scenario_select.value = selected.id
+
+    def _delete_selected_scenario(self) -> None:
+        """Delete the currently selected scenario."""
+        if not self._scenario_select or not self._scenario_select.value:
+            ui.notify("No scenario selected", type="warning")
+            return
+        scenario_id = self._scenario_select.value
+        if self.scenario_controller.delete(scenario_id):
+            ui.notify("Scenario deleted", type="positive")
+            loan_id = self.get_selected_loan_id()
+            self.refresh(loan_id)
+            if self.on_scenario_changed:
+                self.on_scenario_changed()
+        else:
+            ui.notify("Failed to delete scenario", type="negative")
 
     def _on_scenario_selected(self) -> None:
         """Handle scenario selection change."""

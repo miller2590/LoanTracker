@@ -6,7 +6,7 @@ import pytest
 from datetime import date
 
 from loantracker.models import Loan, Payment
-from loantracker.strategies import DailyPayoffStrategy, PayoffPoint
+from loantracker.strategies import DailyPayoffStrategy, PayoffPoint, ProjectionSummary
 
 
 @pytest.fixture
@@ -100,6 +100,55 @@ class TestDailyPayoffStrategy:
         """Test that invalid granularity raises ValueError."""
         with pytest.raises(ValueError, match="Unsupported granularity"):
             strategy.project(sample_loan, [], extra_monthly=0.0, granularity="weekly")
+
+    def test_zero_apr_loan(self, strategy: DailyPayoffStrategy) -> None:
+        """Test projection for a 0% APR loan."""
+        loan = Loan(id=1, name="0% Loan", principal=10000.0, apr=0.0, minimum_payment=500.0, start_date=date(2025, 1, 1))
+        points = strategy.project(loan, [], extra_monthly=0.0, granularity="monthly")
+
+        assert points[-1].balance == 0.0
+        # With 0% interest, $10k / $500 = 20 monthly payments
+        assert len(points) <= 22  # Allow some tolerance for month boundaries
+
+    def test_current_balance_future_start(self, strategy: DailyPayoffStrategy) -> None:
+        """Test current_balance for a loan starting in the future."""
+        from datetime import timedelta
+        future_loan = Loan(
+            id=1, name="Future", principal=50000.0, apr=5.0, minimum_payment=300.0,
+            start_date=date.today() + timedelta(days=30),
+        )
+        balance = strategy.current_balance(future_loan, [])
+        assert balance == 50000.0
+
+    def test_current_balance_with_payments(self, strategy: DailyPayoffStrategy) -> None:
+        """Test current_balance accounts for extra payments."""
+        loan = Loan(id=1, name="Test", principal=100000.0, apr=6.5, minimum_payment=632.07, start_date=date(2025, 1, 1))
+        payment = Payment(id=1, loan_id=1, amount=5000.0, payment_date=date(2025, 6, 1), note=None)
+
+        balance_without = strategy.current_balance(loan, [])
+        balance_with = strategy.current_balance(loan, [payment])
+
+        assert balance_with < balance_without
+
+    def test_project_with_summary_totals(self, strategy: DailyPayoffStrategy) -> None:
+        """Test that project_with_summary returns accurate interest totals."""
+        loan = Loan(id=1, name="Test", principal=10000.0, apr=5.0, minimum_payment=500.0, start_date=date(2025, 1, 1))
+        summary = strategy.project_with_summary(loan, [], extra_monthly=0.0, granularity="monthly")
+
+        assert isinstance(summary, ProjectionSummary)
+        assert summary.total_interest > 0
+        assert summary.total_paid > 0
+        assert summary.payoff_date is not None
+        assert summary.points[-1].balance == 0.0
+
+    def test_project_with_summary_extra_saves_interest(self, strategy: DailyPayoffStrategy) -> None:
+        """Test that extra payments reduce total interest in summary."""
+        loan = Loan(id=1, name="Test", principal=50000.0, apr=6.0, minimum_payment=500.0, start_date=date(2025, 1, 1))
+        baseline = strategy.project_with_summary(loan, [], extra_monthly=0.0, granularity="monthly")
+        with_extra = strategy.project_with_summary(loan, [], extra_monthly=200.0, granularity="monthly")
+
+        assert with_extra.total_interest < baseline.total_interest
+        assert with_extra.payoff_date < baseline.payoff_date
 
 
 class TestPayoffPoint:

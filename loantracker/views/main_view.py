@@ -111,6 +111,7 @@ class LoanTrackerView:
                 self._loan_details = LoanDetailsCard(
                     self.loan_controller,
                     self.payment_controller,
+                    self.projection_controller,
                     on_loan_updated=self._on_loan_updated,
                 )
                 self._loan_details.build()

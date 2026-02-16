@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from nicegui import ui
 
 from ...controllers import ProjectionController
@@ -14,14 +16,14 @@ class ChartPanel:
         self.projection_controller = projection_controller
         self._chart: ui.echart | None = None
         self._granularity_select: ui.select | None = None
-        self._on_granularity_change: callable = None
+        self._on_granularity_change: Callable[[], None] | None = None
 
     @property
     def granularity(self) -> str:
         """Get the current granularity setting."""
         return self._granularity_select.value if self._granularity_select else "monthly"
 
-    def build(self, on_granularity_change: callable) -> ui.echart:
+    def build(self, on_granularity_change: Callable[[], None]) -> ui.echart:
         """Build and return the chart panel."""
         self._on_granularity_change = on_granularity_change
 

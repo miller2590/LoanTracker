@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from nicegui import ui
 
-from ...controllers import LoanController, PaymentController
+from ...controllers import LoanController, PaymentController, ProjectionController
 from ...models import Loan
 
 
@@ -15,10 +17,12 @@ class LoanDetailsCard:
         self,
         loan_controller: LoanController,
         payment_controller: PaymentController,
-        on_loan_updated: callable = None,
+        projection_controller: ProjectionController,
+        on_loan_updated: Callable[[Loan], None] | None = None,
     ) -> None:
         self.loan_controller = loan_controller
         self.payment_controller = payment_controller
+        self.projection_controller = projection_controller
         self.on_loan_updated = on_loan_updated
         self._container: ui.column | None = None
 
@@ -44,7 +48,7 @@ class LoanDetailsCard:
 
         payments = self.payment_controller.list_for_loan(loan_id)
         total_extra_paid = sum(p.amount for p in payments)
-        current_balance = loan.principal - total_extra_paid
+        current_balance = self.projection_controller.current_balance(loan_id)
 
         with self._container:
             with ui.row().classes("w-full items-center"):
